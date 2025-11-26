@@ -262,16 +262,13 @@ MCP Client can access the following tools to interact with Windows:
 
 - `Click-Tool`: Click on the screen at the given coordinates.
 - `Type-Tool`: Type text on an element (optionally clears existing text).
-- `Clipboard-Tool`: Copy or paste using the system clipboard.
 - `Scroll-Tool`: Scroll vertically or horizontally on the window or specific regions.
 - `Drag-Tool`: Drag from one point to another.
 - `Move-Tool`: Move mouse pointer.
 - `Shortcut-Tool`: Press keyboard shortcuts (`Ctrl+c`, `Alt+Tab`, etc).
-- `Key-Tool`: Press a single key.
 - `Wait-Tool`: Pause for a defined duration.
-- `State-Tool`: Combined snapshot of default language, browser, active apps and interactive, textual and scrollable elements along with screenshot of the desktop.
-- `Resize-Tool`: Used to change the window size or location of an app.
-- `Launch-Tool`: To launch an application from the start menu.
+- `State-Tool`: Combined snapshot of default language, browser, active apps and interactive, textual and scrollable elements along with screenshot of the desktop..
+- `App-Tool`: To launch an application from the start menu, resize or move the window and switch between apps.
 - `Shell-Tool`: To execute PowerShell commands.
 - `Scrape-Tool`: To scrape the entire webpage for information.
 
@@ -290,13 +287,25 @@ Stay updated and join our community:
 
 This MCP interacts directly with your Windows operating system to perform actions. Use with caution and avoid deploying it in environments where such risks cannot be tolerated.
 
+## 🔒 Security
+
+**Important**: Windows-MCP operates with full system access and can perform irreversible operations. Please review our comprehensive security guidelines before deployment.
+
+For detailed security information, including:
+- Tool-specific risk assessments
+- Deployment recommendations
+- Vulnerability reporting procedures
+- Compliance and auditing guidelines
+
+Please read our [Security Policy](SECURITY.md).
+
 ## 📝 Limitations
 
 - Selecting specific sections of the text in a paragraph, as the MCP is relying on a11y tree. (⌛ Working on it.)
 - `Type-Tool` is meant for typing text, not programming in IDE because of it types program as a whole in a file. (⌛ Working on it.)
-- This MCP server can't be used to play video games.
+- This MCP server can't be used to play video games 🎮.
 
-## 🪪License
+## 🪪 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
