@@ -77,7 +77,13 @@ def powershell_tool(command: str) -> str:
     )
     )
 def state_tool(use_vision:bool=False):
-    desktop_state=desktop.get_state(use_vision=use_vision,as_bytes=True,scale=0.7 if screen_height>1080 else 1.0)
+    # Calculate scale factor to cap resolution at 1080p (1920x1080)
+    max_width, max_height = 1920, 1080
+    scale_width = max_width / screen_width if screen_width > max_width else 1.0
+    scale_height = max_height / screen_height if screen_height > max_height else 1.0
+    scale = min(scale_width, scale_height)  # Use the smaller scale to ensure both dimensions fit
+    
+    desktop_state=desktop.get_state(use_vision=use_vision,as_bytes=True,scale=scale)
     interactive_elements=desktop_state.tree_state.interactive_elements_to_string()
     scrollable_elements=desktop_state.tree_state.scrollable_elements_to_string()
     apps=desktop_state.apps_to_string()
