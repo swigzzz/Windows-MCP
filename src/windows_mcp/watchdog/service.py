@@ -8,54 +8,11 @@ from threading import Thread, Event
 import comtypes.client
 import comtypes
 
-# Get UIA Interface for COM definitions
-uia_client = _AutomationClient.instance()
-UIA = uia_client.UIAutomationCore
-
-class FocusChangedEventHandler(comtypes.COMObject):
-    _com_interfaces_ = [UIA.IUIAutomationFocusChangedEventHandler]
-
-    def __init__(self, parent):
-        self.parent = parent
-        super(FocusChangedEventHandler, self).__init__()
-
-    def HandleFocusChangedEvent(self, sender):
-        try:
-            if self.parent._focus_callback:
-                self.parent._focus_callback(sender)
-        except Exception as e:
-            print(f"Error in focus callback: {e}")
-        return 0 # S_OK
-
-class StructureChangedEventHandler(comtypes.COMObject):
-    _com_interfaces_ = [UIA.IUIAutomationStructureChangedEventHandler]
-
-    def __init__(self, parent):
-        self.parent = parent
-        super(StructureChangedEventHandler, self).__init__()
-
-    def HandleStructureChangedEvent(self, sender, changeType, runtimeId):
-        try:
-            if self.parent._structure_callback:
-                self.parent._structure_callback(sender, changeType, runtimeId)
-        except Exception as e:
-            print(f"Error in structure callback: {e}")
-        return 0 # S_OK
-
-class PropertyChangedEventHandler(comtypes.COMObject):
-    _com_interfaces_ = [UIA.IUIAutomationPropertyChangedEventHandler]
-
-    def __init__(self, parent):
-        self.parent = parent
-        super(PropertyChangedEventHandler, self).__init__()
-
-    def HandlePropertyChangedEvent(self, sender, propertyId, newValue):
-        try:
-            if self.parent._property_callback:
-                self.parent._property_callback(sender, propertyId, newValue)
-        except Exception as e:
-            print(f"Error in property callback: {e}")
-        return 0 # S_OK
+from .event_handlers import (
+    FocusChangedEventHandler,
+    StructureChangedEventHandler,
+    PropertyChangedEventHandler
+)
 
 class WatchDog:
     def __init__(self):

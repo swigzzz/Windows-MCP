@@ -304,9 +304,6 @@ def scrape_tool(url:str,use_dom:bool=False, ctx: Context = None)->str:
     show_default=True
 )
 def main(transport, host, port):
-    if host and host.isdigit():
-        click.echo(f"Warning: Host '{host}' appears to be a port number. defaulting host to 'localhost'.", err=True)
-        host = "localhost"
 
     if transport=='stdio':
         mcp.run()

@@ -1,4 +1,4 @@
-from windows_mcp.tree.views import TreeState,BoundingBox
+from windows_mcp.tree.views import TreeState
 from dataclasses import dataclass
 from tabulate import tabulate
 from typing import Optional
@@ -20,16 +20,14 @@ class Status(Enum):
 @dataclass
 class App:
     name:str
-    runtime_id:tuple[int]
-    is_browser:bool
     depth:int
     status:Status
-    bounding_box:BoundingBox
+    size:'Size'
     handle: int
     process_id:int
     
     def to_row(self):
-        return [self.name, self.depth, self.status.value, self.bounding_box.width, self.bounding_box.height, self.handle]
+        return [self.name, self.depth, self.status.value, self.size.width, self.size.height, self.handle]
 
 @dataclass
 class Size:
@@ -43,8 +41,8 @@ class Size:
 class DesktopState:
     apps:list[App]
     active_app:Optional[App]
-    screenshot:Optional[Image]=None
-    tree_state:Optional[TreeState]=None
+    screenshot:Image|None
+    tree_state:TreeState
 
     def active_app_to_string(self):
         if self.active_app is None:
