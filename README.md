@@ -26,7 +26,8 @@
 mcp-name: io.github.CursorTouch/Windows-MCP
 
 ## Updates
-
+- Windows-MCP reached 1M+ Users in [Claude Desktop Extensiosn](https://claude.ai/directory). 
+- Windows-MCP is now available on [PyPI](https://pypi.org/project/windows-mcp/) (thus supports `uvx windows-mcp`)
 - Windows-MCP is added to [MCP Registry](https://github.com/modelcontextprotocol/registry)
 - Try out 🪟[Windows-Use](https://github.com/CursorTouch/Windows-Use)!!, an agent built using Windows-MCP.
 - Windows-MCP is now featured as Desktop Extension in `Claude Desktop`.
@@ -64,13 +65,16 @@ mcp-name: io.github.CursorTouch/Windows-MCP
 - **Real-Time Interaction**  
   Typical latency between actions (e.g., from one mouse click to the next) ranges from **0.7 to 2.5 secs**, and may slightly vary based on the number of active applications and system load, also the inferencing speed of the llm.
 
+- **DOM Mode for Browser Automation**  
+  Special `use_dom=True` mode for State-Tool that focuses exclusively on web page content, filtering out browser UI elements for cleaner, more efficient web automation.
+
 ## 🛠️Installation
 
 ### Prerequisites
 
 - Python 3.13+
 - UV (Package Manager) from Astra, install with `pip install uv` or `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- `English` as the default language in Windows highly preferred or disable the `Launch-Tool` and `Switch-Tool` in the MCP Server for Windows with other languages.
+- `English` as the default language in Windows highly preferred or disable the `App-Tool` in the MCP Server for Windows with other languages.
 
 <details>
   <summary>Install in Claude Desktop</summary>
@@ -81,23 +85,56 @@ mcp-name: io.github.CursorTouch/Windows-MCP
 npm install -g @anthropic-ai/mcpb
 ```
 
-  2. Clone the repository.
 
-```shell
-git clone https://github.com/CursorTouch/Windows-MCP.git
+  2. Configure the extension:
 
-cd Windows-MCP
-```
+  **Option A: Install from PyPI (Recommended)**
+  
+  Use `uvx` to run the latest version directly from PyPI.
 
-  3. Build Desktop Extension `MCPB`:
+  Add this to your `claude_desktop_config.json`:
+  ```json
+  {
+    "mcpServers": {
+      "windows-mcp": {
+        "command": "uvx",
+        "args": [
+          "windows-mcp"
+        ]
+      }
+    }
+  }
+  ```
 
-```shell
-npx @anthropic-ai/mcpb pack
-```
+  **Option B: Install from Source**
 
-  4. Open Claude Desktop:
+  1. Clone the repository:
+  ```shell
+  git clone https://github.com/CursorTouch/Windows-MCP.git
+  cd Windows-MCP
+  ```
 
-Go to `Settings->Extensions->Advance Settings->Install Extension` (locate the `.mcpb` file)-> Install
+  2. Add this to your `claude_desktop_config.json`:
+  ```json
+  {
+    "mcpServers": {
+      "windows-mcp": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "<path to the windows-mcp directory>",
+          "run",
+          "windows-mcp"
+        ]
+      }
+    }
+  }
+  ```
+
+
+
+  3. Open Claude Desktop and enjoy! 🥳
+
 
   5. Enjoy 🥳.
 
@@ -123,17 +160,32 @@ Go to `Settings->Connectors->Add Connector->Advanced`
 
   4. Enter the name as `Windows-MCP`, then paste the following JSON in the text area.
 
-```json
-{
-  "command": "uv",
-  "args": [
-    "--directory",
-    "<path to the windows-mcp directory>",
-    "run",
-    "main.py"
-  ]
-}
-```
+
+  **Option A: Install from PyPI (Recommended)**
+
+  ```json
+  {
+    "command": "uvx",
+    "args": [
+      "windows-mcp"
+    ]
+  }
+  ```
+
+  **Option B: Install from Source**
+
+  ```json
+  {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "<path to the windows-mcp directory>",
+      "run",
+      "windows-mcp"
+    ]
+  }
+  ```
+
 
 5. Click `Save` and Enjoy 🥳.
 
@@ -149,13 +201,9 @@ For additional Claude Desktop integration troubleshooting, see the [Perplexity M
 npm install -g @google/gemini-cli
 ```
 
-  2. Clone the repository.
 
-```shell
-git clone https://github.com/CursorTouch/Windows-MCP.git
+  2. Configure the server in `%USERPROFILE%/.gemini/settings.json`:
 
-cd Windows-MCP
-```
 
   3. Navigate to `%USERPROFILE%/.gemini` in File Explorer and open `settings.json`.
 
@@ -165,20 +213,18 @@ cd Windows-MCP
 {
   "theme": "Default",
   ...
-//MCP Server Config
   "mcpServers": {
     "windows-mcp": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "--directory",
-        "<path to the windows-mcp directory>",
-        "run",
-        "main.py"
+        "windows-mcp"
       ]
     }
   }
 }
 ```
+*Note: To run from source, replace the command with `uv` and args with `["--directory", "<path>", "run", "windows-mcp"]`.*
+
 
   5. Rerun Gemini CLI in terminal. Enjoy 🥳
 </details>
@@ -190,13 +236,9 @@ cd Windows-MCP
 ```shell
 npm install -g @qwen-code/qwen-code@latest
 ```
-  2. Clone the repository.
 
-```shell
-git clone https://github.com/CursorTouch/Windows-MCP.git
+   2. Configure the server in `%USERPROFILE%/.qwen/settings.json`:
 
-cd Windows-MCP
-```
 
   3. Navigate to `%USERPROFILE%/.qwen/settings.json`.
 
@@ -204,20 +246,18 @@ cd Windows-MCP
 
 ```json
 {
-//MCP Server Config
   "mcpServers": {
     "windows-mcp": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "--directory",
-        "<path to the windows-mcp directory>",
-        "run",
-        "main.py"
+        "windows-mcp"
       ]
     }
   }
 }
 ```
+*Note: To run from source, replace the command with `uv` and args with `["--directory", "<path>", "run", "windows-mcp"]`.*
+
 
   5. Rerun Qwen Code in terminal. Enjoy 🥳
 </details>
@@ -229,27 +269,22 @@ cd Windows-MCP
 ```shell
 npm install -g @openai/codex
 ```
-  2. Clone the repository.
 
-```shell
-git clone https://github.com/CursorTouch/Windows-MCP.git
+  2. Configure the server in `%USERPROFILE%/.codex/config.toml`:
 
-cd Windows-MCP
-```
   3. Navigate to `%USERPROFILE%/.codex/config.toml`.
 
   4. Add the `windows-mcp` config in the `config.toml` and save it.
 
 ```toml
 [mcp_servers.windows-mcp]
-command="uv"
+command="uvx"
 args=[
-  "--directory",
-  "<path to the windows-mcp directory>",
-  "run",
-  "main.py"
+  "windows-mcp"
 ]
 ```
+*Note: To run from source, replace the command with `uv` and args with `["--directory", "<path>", "run", "windows-mcp"]`.*
+
 
   5. Rerun Codex CLI in terminal. Enjoy 🥳
 </details>
@@ -262,16 +297,13 @@ MCP Client can access the following tools to interact with Windows:
 
 - `Click-Tool`: Click on the screen at the given coordinates.
 - `Type-Tool`: Type text on an element (optionally clears existing text).
-- `Clipboard-Tool`: Copy or paste using the system clipboard.
 - `Scroll-Tool`: Scroll vertically or horizontally on the window or specific regions.
 - `Drag-Tool`: Drag from one point to another.
 - `Move-Tool`: Move mouse pointer.
 - `Shortcut-Tool`: Press keyboard shortcuts (`Ctrl+c`, `Alt+Tab`, etc).
-- `Key-Tool`: Press a single key.
 - `Wait-Tool`: Pause for a defined duration.
-- `State-Tool`: Combined snapshot of default language, browser, active apps and interactive, textual and scrollable elements along with screenshot of the desktop.
-- `Resize-Tool`: Used to change the window size or location of an app.
-- `Launch-Tool`: To launch an application from the start menu.
+- `State-Tool`: Combined snapshot of default language, browser, active apps and interactive, textual and scrollable elements along with screenshot of the desktop. Supports `use_dom=True` for browser content extraction (web page elements only) and `use_vision=True` for including screenshots.
+- `App-Tool`: To launch an application from the start menu, resize or move the window and switch between apps.
 - `Shell-Tool`: To execute PowerShell commands.
 - `Scrape-Tool`: To scrape the entire webpage for information.
 
@@ -290,13 +322,49 @@ Stay updated and join our community:
 
 This MCP interacts directly with your Windows operating system to perform actions. Use with caution and avoid deploying it in environments where such risks cannot be tolerated.
 
+## 🔒 Security
+
+**Important**: Windows-MCP operates with full system access and can perform irreversible operations. Please review our comprehensive security guidelines before deployment.
+
+For detailed security information, including:
+- Tool-specific risk assessments
+- Deployment recommendations
+- Vulnerability reporting procedures
+- Compliance and auditing guidelines
+
+Please read our [Security Policy](SECURITY.md).
+
+## 📊 Telemetry
+
+Windows-MCP collects usage data to help improve the MCP server. No personal information, no tool arguments, no outputs are tracked.
+
+To disable telemetry, add the following to your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "windows-mcp": {
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ],
+      "env": {
+        "ANONYMIZED_TELEMETRY": "false"
+      }
+    }
+  }
+}
+```
+
+For detailed information on what data is collected and how it is handled, please refer to the [Telemetry and Data Privacy](SECURITY.md#telemetry-and-data-privacy) section in our Security Policy.
+
 ## 📝 Limitations
 
 - Selecting specific sections of the text in a paragraph, as the MCP is relying on a11y tree. (⌛ Working on it.)
 - `Type-Tool` is meant for typing text, not programming in IDE because of it types program as a whole in a file. (⌛ Working on it.)
-- This MCP server can't be used to play video games.
+- This MCP server can't be used to play video games 🎮.
 
-## 🪪License
+## 🪪 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
@@ -327,3 +395,4 @@ Made with ❤️ by [CursorTouch](https://github.com/CursorTouch)
   url={https://github.com/CursorTouch/Windows-MCP}
 }
 ```
+

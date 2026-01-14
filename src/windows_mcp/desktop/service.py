@@ -1,10 +1,10 @@
-from src.desktop.config import BROWSER_NAMES, PROCESS_PER_MONITOR_DPI_AWARE
-from src.desktop.views import DesktopState, App, Size, Status
+from windows_mcp.desktop.config import BROWSER_NAMES, PROCESS_PER_MONITOR_DPI_AWARE
+from windows_mcp.desktop.views import DesktopState, App, Size, Status
+from windows_mcp.tree.service import Tree
 from locale import getpreferredencoding
 from contextlib import contextmanager
 from typing import Optional,Literal
 from markdownify import markdownify
-from src.tree.service import Tree
 from fuzzywuzzy import process
 from psutil import Process
 from time import sleep
@@ -34,7 +34,7 @@ try:
 except Exception:  
     ctypes.windll.user32.SetProcessDPIAware()  
 
-import uiautomation as uia
+import windows_mcp.uia as uia
 import pyautogui as pg
 
 pg.FAILSAFE=False
@@ -46,17 +46,20 @@ class Desktop:
         self.tree=Tree(self)
         self.desktop_state=None
         
-    def get_state(self,use_vision:bool=False,as_bytes:bool=False)->DesktopState:
+    def get_resolution(self)->tuple[int,int]:
+        return pg.size()
+        
+    def get_state(self,use_vision:bool=False,use_dom:bool=False,as_bytes:bool=False,scale:float=1.0)->DesktopState:
         sleep(0.1)
         apps=self.get_apps()
         active_app=self.get_active_app()
-        if active_app is not None:
+        if active_app is not None and active_app in apps:
             apps.remove(active_app)
         logger.debug(f"Active app: {active_app}")
         logger.debug(f"Apps: {apps}")
-        tree_state=self.tree.get_state(active_app,apps)
+        tree_state=self.tree.get_state(active_app,apps,use_dom=use_dom)
         if use_vision:
-            screenshot=self.tree.annotated_screenshot(tree_state.interactive_nodes)
+            screenshot=self.tree.get_annotated_screenshot(tree_state.interactive_nodes,scale=scale)
             if as_bytes:
                 bytes_io=io.BytesIO()
                 screenshot.save(bytes_io,format='PNG')
@@ -169,7 +172,7 @@ class Desktop:
                 sleep(1.25)
                 if status!=0:
                     return response
-                consecutive_waits=3
+                consecutive_waits=10
                 for _ in range(consecutive_waits):
                     if not self.is_app_running(name):
                         sleep(1.25)
@@ -197,11 +200,12 @@ class Desktop:
         app_name,_=matched_app
         appid=apps_map.get(app_name)
         if appid is None:
-            return (name,f'{name.title()} not found in start menu.',1)
-        if name.endswith('.exe'):
-            response,status=self.execute_command(f'Start-Process {appid}')
+            return (f'{name.title()} not found in start menu.',1)
+        if appid.endswith('.exe'):
+            command=f"Start-Process '{appid}'"
         else:
-            response,status=self.execute_command(f'Start-Process shell:AppsFolder\\{appid}')
+            command=f"Start-Process shell:AppsFolder\\{appid}"
+        response,status=self.execute_command(command)
         return response,status
     
     def switch_app(self,name:str):

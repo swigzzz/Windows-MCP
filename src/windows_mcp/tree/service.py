@@ -1,12 +1,12 @@
-from src.tree.config import INTERACTIVE_CONTROL_TYPE_NAMES,DOCUMENT_CONTROL_TYPE_NAMES,INFORMATIVE_CONTROL_TYPE_NAMES, DEFAULT_ACTIONS, THREAD_MAX_RETRIES
-from uiautomation import Control,ImageControl,ScrollPattern,WindowControl,Rect,GetRootControl,PatternId
-from src.tree.views import TreeElementNode, ScrollElementNode, Center, BoundingBox, TreeState
+from windows_mcp.tree.config import INTERACTIVE_CONTROL_TYPE_NAMES,DOCUMENT_CONTROL_TYPE_NAMES,INFORMATIVE_CONTROL_TYPE_NAMES, DEFAULT_ACTIONS, THREAD_MAX_RETRIES
+from windows_mcp.tree.views import TreeElementNode, ScrollElementNode, TextElementNode, Center, BoundingBox, TreeState, DOMInfo
+from windows_mcp.uia import Control,ImageControl,ScrollPattern,WindowControl,Rect,GetRootControl,PatternId
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.tree.utils import random_point_within_bounding_box
+from windows_mcp.tree.utils import random_point_within_bounding_box
 from PIL import Image, ImageFont, ImageDraw
-from src.desktop.views import App
-from typing import TYPE_CHECKING
-from time import sleep
+from typing import TYPE_CHECKING,Optional
+from windows_mcp.desktop.views import App
+from time import sleep,time
 import logging
 import random
 
@@ -18,36 +18,38 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 if TYPE_CHECKING:
-    from src.desktop.service import Desktop
+    from windows_mcp.desktop.service import Desktop
     
 class Tree:
     def __init__(self,desktop:'Desktop'):
         self.desktop=desktop
-        screen_size=self.desktop.get_screen_size()
+        self.screen_size=self.desktop.get_screen_size()
+        self.dom_info:Optional[DOMInfo]=None
         self.dom_bounding_box:BoundingBox=None
         self.screen_box=BoundingBox(
-            top=0, left=0, bottom=screen_size.height, right=screen_size.width,
-            width=screen_size.width, height=screen_size.height 
+            top=0, left=0, bottom=self.screen_size.height, right=self.screen_size.width,
+            width=self.screen_size.width, height=self.screen_size.height 
         )
 
-    def get_state(self,active_app:App,other_apps:list[App])->TreeState:
+    def get_state(self,active_app:App,other_apps:list[App],use_dom:bool=False)->TreeState:
         root=GetRootControl()
         other_apps_handle=set(map(lambda other_app: other_app.handle,other_apps))
         apps=list(filter(lambda app:app.NativeWindowHandle not in other_apps_handle,root.GetChildren()))
         del other_apps_handle
         if active_app:
             apps=list(filter(lambda app:app.ClassName!='Progman',apps))
-        interactive_nodes,scrollable_nodes=self.get_appwise_nodes(apps=apps)
-        return TreeState(interactive_nodes=interactive_nodes,scrollable_nodes=scrollable_nodes)
+        interactive_nodes,scrollable_nodes,dom_informative_nodes=self.get_appwise_nodes(apps=apps,use_dom=use_dom)
+        return TreeState(dom_info=self.dom_info,interactive_nodes=interactive_nodes,scrollable_nodes=scrollable_nodes,dom_informative_nodes=dom_informative_nodes)
 
-    def get_appwise_nodes(self,apps:list[Control]) -> tuple[list[TreeElementNode],list[ScrollElementNode]]:
-        interactive_nodes, scrollable_nodes = [], []
+    def get_appwise_nodes(self,apps:list[Control],use_dom:bool=False)-> tuple[list[TreeElementNode],list[ScrollElementNode],list[TextElementNode]]:
+        interactive_nodes, scrollable_nodes,dom_informative_nodes = [], [], []
         with ThreadPoolExecutor() as executor:
             retry_counts = {app: 0 for app in apps}
             future_to_app = {
                 executor.submit(
                     self.get_nodes, app, 
-                    self.desktop.is_app_browser(app)
+                    self.desktop.is_app_browser(app),
+                    use_dom
                 ): app 
                 for app in apps
             }
@@ -57,18 +59,20 @@ class Tree:
                     try:
                         result = future.result()
                         if result:
-                            element_nodes, scroll_nodes = result
+                            element_nodes, scroll_nodes,informative_nodes = result
                             interactive_nodes.extend(element_nodes)
                             scrollable_nodes.extend(scroll_nodes)
+                            dom_informative_nodes.extend(informative_nodes)
                     except Exception as e:
                         retry_counts[app] += 1
                         logger.debug(f"Error in processing node {app.Name}, retry attempt {retry_counts[app]}\nError: {e}")
                         if retry_counts[app] < THREAD_MAX_RETRIES:
-                            new_future = executor.submit(self.get_nodes, app, self.desktop.is_app_browser(app))
+                            logger.debug(f"Retrying {app.Name} for the {retry_counts[app]}th time")
+                            new_future = executor.submit(self.get_nodes, app, self.desktop.is_app_browser(app),use_dom)
                             future_to_app[new_future] = app
                         else:
                             logger.error(f"Task failed completely for {app.Name} after {THREAD_MAX_RETRIES} retries")
-        return interactive_nodes,scrollable_nodes
+        return interactive_nodes,scrollable_nodes,dom_informative_nodes
     
     def iou_bounding_box(self,window_box: Rect,element_box: Rect,) -> BoundingBox:
         # Step 1: Intersection of element and window (existing logic)
@@ -105,7 +109,7 @@ class Tree:
             )
         return bounding_box
 
-    def get_nodes(self, node: Control, is_browser:bool=False) -> tuple[list[TreeElementNode],list[ScrollElementNode]]:
+    def get_nodes(self, node: Control, is_browser:bool=False,use_dom:bool=False) -> tuple[list[TreeElementNode],list[ScrollElementNode]]:
         window_bounding_box=node.BoundingRectangle
 
         def is_element_visible(node:Control,threshold:int=0):
@@ -331,11 +335,10 @@ class Tree:
                         'is_focused':is_focused
                     })
                     interactive_nodes.append(tree_node)
-            # elif is_element_text(node):
-            #     informative_nodes.append(TextElementNode(
-            #         name=node.Name.strip() or "''",
-            #         app_name=app_name
-            #     ))
+            elif is_element_text(node):
+                dom_informative_nodes.append(TextElementNode(
+                    text=node.Name.strip(),
+                ))
             
             children=node.GetChildren()
 
@@ -344,11 +347,18 @@ class Tree:
                 # Incrementally building the xpath
                 
                 # Check if the child is a DOM element
-                if is_browser and child.ClassName == "Chrome_RenderWidgetHostHWND":
+                if is_browser and child.AutomationId == "RootWebArea":
                     bounding_box=child.BoundingRectangle
                     self.dom_bounding_box=BoundingBox(left=bounding_box.left,top=bounding_box.top,
                     right=bounding_box.right,bottom=bounding_box.bottom,width=bounding_box.width(),
                     height=bounding_box.height())
+                    scroll_pattern=child.GetPattern(PatternId.ScrollPattern)
+                    self.dom_info=DOMInfo(
+                        horizontal_scrollable=scroll_pattern.HorizontallyScrollable,
+                        horizontal_scroll_percent=scroll_pattern.HorizontalScrollPercent if scroll_pattern.HorizontallyScrollable else 0,
+                        vertical_scrollable=scroll_pattern.VerticallyScrollable,
+                        vertical_scroll_percent=scroll_pattern.VerticalScrollPercent if scroll_pattern.VerticallyScrollable else 0
+                    )
                     # enter DOM subtree
                     tree_traversal(child, is_dom=True, is_dialog=is_dialog)
                 # Check if the child is a dialog
@@ -369,7 +379,7 @@ class Tree:
                     # normal non-dialog children
                     tree_traversal(child, is_dom=is_dom, is_dialog=is_dialog)
 
-        interactive_nodes, dom_interactive_nodes, scrollable_nodes = [], [], []
+        interactive_nodes, dom_interactive_nodes, scrollable_nodes, dom_informative_nodes = [], [], [], []
         app_name=node.Name.strip()
         match node.ClassName:
             case "Progman":
@@ -386,12 +396,159 @@ class Tree:
         logger.debug(f'DOM interactive nodes:{len(dom_interactive_nodes)}')
         logger.debug(f'Scrollable nodes:{len(scrollable_nodes)}')
 
-        interactive_nodes.extend(dom_interactive_nodes)
-        return (interactive_nodes,scrollable_nodes)
+        if use_dom:
+            if is_browser:
+                return (dom_interactive_nodes,scrollable_nodes,dom_informative_nodes)
+            else:
+                return ([],[],[])
+        else:
+            return (interactive_nodes+dom_interactive_nodes,scrollable_nodes,dom_informative_nodes)
 
-    def annotated_screenshot(self, nodes: list[TreeElementNode]) -> Image.Image:
+    def _on_focus_change(self, sender:'ctypes.POINTER(IUIAutomationElement)'):
+        """Handle focus change events."""
+        # Debounce duplicate events
+        current_time = time()
+        element = Control.CreateControlFromElement(sender)
+        runtime_id=element.GetRuntimeId()
+        event_key = tuple(runtime_id)
+        if hasattr(self, '_last_focus_event') and self._last_focus_event:
+            last_key, last_time = self._last_focus_event
+            if last_key == event_key and (current_time - last_time) < 1.0:
+                return None
+        self._last_focus_event = (event_key, current_time)
+
+        try:
+            logger.debug(f"[WatchDog] Focus changed to: '{element.Name}' ({element.ControlTypeName})")
+        except Exception:
+            pass
+
+    def _on_structure_change(self, sender:'ctypes.POINTER(IUIAutomationElement)', changeType:int, runtime_id:list[int]):
+        """Handle structure change events."""
+        try:
+            # Debounce duplicate events
+            current_time = time()
+            event_key = (changeType, tuple(runtime_id))
+            if hasattr(self, '_last_structure_event') and self._last_structure_event:
+                last_key, last_time = self._last_structure_event
+                if last_key == event_key and (current_time - last_time) < 5.0:
+                    return None
+            self._last_structure_event = (event_key, current_time)
+
+            node = Control.CreateControlFromElement(sender)
+
+            match StructureChangeType(changeType):
+                case StructureChangeType.StructureChangeType_ChildAdded|StructureChangeType.StructureChangeType_ChildrenBulkAdded:
+                    interactive_nodes=[]
+                    app=self.desktop.get_app_from_element(node)
+                    app_name=self.app_name_correction(app.name if app else node.Name.strip())
+                    is_browser=app.is_browser if app else False
+                    if isinstance(node,WindowControl|PaneControl):
+                        #Subtree traversal
+                        window_bounding_box=app.bounding_box if app else node.BoundingRectangle
+                        self.tree_traversal(node,window_bounding_box,app_name,is_browser,interactive_nodes=interactive_nodes)
+                    else:
+                        #If element is interactive take it else skip it
+                        if not self.is_element_interactive(node=node,is_browser=is_browser):
+                            return None
+                        legacy_pattern=node.GetLegacyIAccessiblePattern()
+                        value=legacy_pattern.Value.strip() if legacy_pattern.Value is not None else ""
+                        cursor_type=AccessibleRoleNames.get(legacy_pattern.Role, "Default")
+                        runtime_id=node.GetRuntimeId()
+                        is_focused=node.HasKeyboardFocus
+                        name=node.Name.strip()
+                        element_bounding_box = node.BoundingRectangle
+                        bounding_box=self.iou_bounding_box(window_bounding_box,element_bounding_box)
+                        center = bounding_box.get_center()
+
+                        interactive_nodes.append(TreeElementNode(
+                            name=name,
+                            control_type=cursor_type,
+                            bounding_box=bounding_box,
+                            center=center,
+                            runtime_id=runtime_id,
+                            app_name=app_name,
+                            value=value,
+                            shortcut="",
+                            xpath="",
+                            is_focused=is_focused
+                        ))
+                    if self.tree_state:    
+                        existing_ids={n.runtime_id for n in self.tree_state.interactive_nodes}
+                        interactive_nodes=[n for n in interactive_nodes if n.runtime_id not in existing_ids]
+                        self.tree_state.interactive_nodes.extend(interactive_nodes)
+                case StructureChangeType.StructureChangeType_ChildrenBulkRemoved | StructureChangeType.StructureChangeType_ChildRemoved:
+                    if changeType == StructureChangeType.StructureChangeType_ChildRemoved and self.tree_state:
+                        if isinstance(node,WindowControl|PaneControl):
+                            parent_bounding_box=BoundingBox.from_bounding_rectangle(node.BoundingRectangle)
+                            # Remove nodes spatially contained in the parent (heuristic for "is descendant")
+                            def is_contained(n:'TreeElementNode'):
+                                cx, cy = n.center.x, n.center.y
+                                return (parent_bounding_box.left <= cx <= parent_bounding_box.right and 
+                                        parent_bounding_box.top <= cy <= parent_bounding_box.bottom)
+                            self.tree_state.interactive_nodes = list(filter(lambda n:not is_contained(n),self.tree_state.interactive_nodes))
+                        else:
+                            target_runtime_id = tuple(runtime_id)
+                            self.tree_state.interactive_nodes = list(filter(lambda n:n.runtime_id != target_runtime_id,self.tree_state.interactive_nodes))
+                case StructureChangeType.StructureChangeType_ChildrenInvalidated:
+                    #Rebuild subtree
+                    parent_bounding_box=BoundingBox.from_bounding_rectangle(node.BoundingRectangle)
+                    app=self.desktop.get_app_from_element(node)
+                    app_name=self.app_name_correction(app.name if app else node.Name.strip())
+                    is_browser=app.is_browser if app else False
+                    window_bounding_box=app.bounding_box if app else parent_bounding_box
+                    interactive_nodes=[]
+                    self.tree_traversal(node,window_bounding_box,app_name,is_browser,interactive_nodes=interactive_nodes)
+
+                    # Remove nodes spatially contained in the parent (heuristic for "is descendant")
+                    def is_contained(n:'TreeElementNode'):
+                        cx, cy = n.center.x, n.center.y
+                        return (parent_bounding_box.left <= cx <= parent_bounding_box.right and 
+                                parent_bounding_box.top <= cy <= parent_bounding_box.bottom)
+                    
+                    if self.tree_state:
+                        self.tree_state.interactive_nodes = list(filter(lambda n:not is_contained(n),self.tree_state.interactive_nodes))
+                        self.tree_state.interactive_nodes.extend(interactive_nodes)
+                case StructureChangeType.StructureChangeType_ChildrenReordered:
+                    app=self.desktop.get_app_from_element(node)
+                    app_name=self.app_name_correction(app.name if app else node.Name.strip())
+                    is_browser=app.is_browser if app else False
+                    window_bounding_box=app.bounding_box if app else node.BoundingRectangle
+                    interactive_nodes=[]
+                    self.tree_traversal(node,window_bounding_box,app_name,is_browser,interactive_nodes=interactive_nodes)
+                    
+                    # Update existing nodes
+                    fresh_nodes_map = {n.runtime_id: n for n in interactive_nodes}
+                    def update_node(existing_node:'TreeElementNode'):
+                        if new_node:=fresh_nodes_map.get(existing_node.runtime_id):
+                            existing_node.update_from_node(new_node)
+                    list(map(update_node,self.tree_state.interactive_nodes))
+        except Exception as e:
+            logger.debug(f"[WatchDog] Structure changed with error: {e}, StructureChangeType={StructureChangeType(changeType).name}")
+        
+        try:
+            logger.debug(f"[WatchDog] Structure changed: Type={StructureChangeType(changeType).name} RuntimeID={tuple(runtime_id)} Sender: '{node.Name}' ({node.ControlTypeName})")
+        except Exception:
+            pass
+
+    def _on_property_change(self, sender:'ctypes.POINTER(IUIAutomationElement)', propertyId:int, newValue):
+        """Handle property change events."""
+        try:
+            element = Control.CreateControlFromElement(sender)
+            logger.debug(f"[WatchDog] Property changed: ID={propertyId} Value={newValue} Element: '{element.Name}' ({element.ControlTypeName})")
+        except Exception:
+            pass
+    
+    def get_annotated_screenshot(self, nodes: list[TreeElementNode],scale:float=1.0) -> Image.Image:
         screenshot = self.desktop.get_screenshot()
         sleep(0.10)
+        
+        original_width = screenshot.width
+        original_height = screenshot.height
+
+        scaled_width = int(original_width * scale)
+        scaled_height = int(original_height * scale)
+        screenshot = screenshot.resize((scaled_width, scaled_height), Image.Resampling.LANCZOS)
+        
         # Add padding
         padding = 5
         width = int(screenshot.width + (1.5 * padding))
@@ -413,12 +570,12 @@ class Tree:
             box = node.bounding_box
             color = get_random_color()
 
-            # Scale and pad the bounding box also clip the bounding box
+            # Scale and pad the bounding box coordinates
             adjusted_box = (
-                int(box.left) + padding,
-                int(box.top) + padding,
-                int(box.right) + padding,
-                int(box.bottom) + padding
+                int(box.left * scale) + padding,
+                int(box.top * scale) + padding,
+                int(box.right * scale) + padding,
+                int(box.bottom * scale) + padding
             )
             # Draw bounding box
             draw.rectangle(adjusted_box, outline=color, width=2)
